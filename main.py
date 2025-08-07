@@ -6,8 +6,6 @@ import os
 import re
 import json
 from datetime import datetime
-import requests
-import io
 from threading import Thread
 from fuzzywuzzy import fuzz
 
@@ -26,20 +24,6 @@ if not os.path.exists(TESSERACT_PATH):
     raise FileNotFoundError("Tesseract n'est pas installé.")
 
 pytesseract.pytesseract.tesseract_cmd = TESSERACT_PATH
-
-# Configuration de l'API météo
-WEATHER_API_KEY = "66ac5e70deb304e75738fc9b6878554f"
-WEATHER_BASE_URL = "https://api.openweathermap.org/data/2.5/weather"
-WEATHER_ICON_MAP = {
-    "Clear": "sun.png",
-    "Clouds": "cloud.png",
-    "Rain": "rain.png",
-    "Snow": "snow.png",
-    "Mist": "windy.png",
-    "Haze": "windy.png",
-    "Dust": "windy.png",
-    "Fog": "windy.png"
-}
 
 # Mots-clés pour l'extraction des données
 keywords = {
@@ -150,7 +134,6 @@ class OCRApp:
         self.extracted_data = {}
         self.history = []
         self.update_clock()
-        self.start_weather_updates("Paris")
         
     def configure_styles(self):
         # Configuration des styles
@@ -230,28 +213,12 @@ class OCRApp:
         ttk.Label(header_frame, text="Système Intelligent d'Extraction de Factures", 
                  style='Title.TLabel').pack(side=tk.LEFT, padx=10)
         
-        # Time and weather frame
+        # Time frame
         info_frame = ttk.Frame(header_frame, style='Panel.TFrame')
         info_frame.pack(side=tk.RIGHT, padx=10)
         
         self.time_label = ttk.Label(info_frame, font=('Segoe UI', 9), style='Header.TLabel')
         self.time_label.pack(side=tk.LEFT, padx=5)
-        
-        # Widget météo
-        weather_frame = ttk.Frame(info_frame, style='Panel.TFrame')
-        weather_frame.pack(side=tk.LEFT, padx=10)
-        
-        self.weather_icon_label = ttk.Label(weather_frame)
-        self.weather_icon_label.pack(side=tk.LEFT, padx=2)
-        
-        self.weather_temp_label = ttk.Label(weather_frame, font=('Segoe UI', 9), style='Header.TLabel')
-        self.weather_temp_label.pack(side=tk.LEFT, padx=2)
-        
-        self.weather_city_entry = ttk.Entry(weather_frame, width=12, font=('Segoe UI', 9), style='Modern.TEntry')
-        self.weather_city_entry.insert(0, "Paris")
-        self.weather_city_entry.pack(side=tk.LEFT, padx=5)
-        
-        ttk.Button(weather_frame, text="🔄", width=2, command=self.update_weather_city).pack(side=tk.LEFT)
         
         # Actions frame
         actions_frame = ttk.Frame(main_frame, style='Panel.TFrame')
@@ -301,63 +268,6 @@ class OCRApp:
         now = datetime.now().strftime("%H:%M:%S - %d/%m/%Y")
         self.time_label.config(text=now)
         self.root.after(1000, self.update_clock)
-
-    def start_weather_updates(self, city="Paris", interval=120000):
-        """Démarre les mises à jour périodiques de la météo"""
-        self.fetch_weather(city)
-        self.weather_update_job = self.root.after(interval, lambda: self.start_weather_updates(city, interval))
-
-    def stop_weather_updates(self):
-        """Arrête les mises à jour automatiques de la météo"""
-        if self.weather_update_job:
-            self.root.after_cancel(self.weather_update_job)
-            self.weather_update_job = None
-
-    def update_weather_city(self):
-        city = self.weather_city_entry.get().strip()
-        if city:
-            self.stop_weather_updates()
-            self.start_weather_updates(city)
-
-    def fetch_weather(self, city):
-        def thread_fetch():
-            params = {
-                "q": city,
-                "units": "metric",
-                "appid": WEATHER_API_KEY,
-                "lang": "fr"
-            }
-
-            try:
-                response = requests.get(WEATHER_BASE_URL, params=params)
-                data = response.json()
-
-                if response.status_code == 200:
-                    temp = data["main"]["temp"]
-                    weather_main = data["weather"][0]["main"]
-                    weather_desc = data["weather"][0]["description"]
-
-                    self.root.after(0, lambda: self.update_weather_ui(temp, weather_main, weather_desc))
-                else:
-                    print(f"Erreur API météo: {data.get('message', 'Unknown error')}")
-            except Exception as e:
-                print(f"Erreur connexion météo: {e}")
-
-        Thread(target=thread_fetch, daemon=True).start()
-
-    def update_weather_ui(self, temp, weather_main, weather_desc):
-        self.weather_temp_label.config(text=f"{temp:.0f}°C - {weather_desc.capitalize()}")
-        
-        icon_url = WEATHER_ICON_MAP.get(weather_main, WEATHER_ICON_MAP["Clouds"])
-        try:
-            icon_response = requests.get(icon_url)
-            img_data = icon_response.content
-            img = Image.open(io.BytesIO(img_data)).resize((30, 30))
-            icon = ImageTk.PhotoImage(img)
-            self.weather_icon_label.config(image=icon)
-            self.weather_icon_label.image = icon
-        except Exception as e:
-            print(f"Erreur chargement icône: {e}")
 
     def load_image(self):
         filepath = filedialog.askopenfilename(
@@ -666,10 +576,4 @@ if __name__ == "__main__":
     app.data_text.tag_configure('bold', font=('Segoe UI', 10, 'bold'), foreground=COLORS['text'])
     app.data_text.tag_configure('data', font=('Consolas', 10), foreground=COLORS['text'])
     
-    # Nettoyage à la fermeture
-    def on_closing():
-        app.stop_weather_updates()
-        root.destroy()
-    
-    root.protocol("WM_DELETE_WINDOW", on_closing)
     root.mainloop()
